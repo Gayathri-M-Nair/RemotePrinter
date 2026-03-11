@@ -1,0 +1,62 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String     @id @default(cuid())
+  name      String
+  email     String     @unique
+  password  String
+  role      Role       @default(STUDENT)
+  studentId String?
+  phone     String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  printJobs PrintJob[]
+}
+
+model PrintJob {
+  id              String      @id @default(uuid())
+  userId          String
+  documentName    String
+  totalPages      Int
+  sheetsRequired  Int
+  printType       String      // single or double
+  colorMode       String      // color or blackwhite
+  pagesPerSheet   Int
+  copies          Int
+  printingCost    Float       // Cost for printing sheets only
+  tokenCharge     Float       @default(1) // Token slip charge (₹1)
+  totalAmount     Float       // printingCost + tokenCharge
+  tokenNumber     String      @unique
+  queuePosition   Int
+  printerLocation String
+  status          PrintStatus @default(PENDING)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  user User @relation(fields: [userId], references: [id])
+  
+  @@index([status])
+  @@index([userId])
+  @@index([tokenNumber])
+}
+
+enum Role {
+  STUDENT
+  ADMIN
+}
+
+enum PrintStatus {
+  PENDING
+  IN_QUEUE
+  PRINTING
+  COMPLETED
+  COLLECTED
+  CANCELLED
+}
