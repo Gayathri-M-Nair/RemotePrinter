@@ -1,7 +1,7 @@
 import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { compare } from 'bcryptjs';
-import { prisma } from './prisma';
+import { db, COLLECTIONS } from './firebase';
 
 export const authOptions: NextAuthOptions = {
   session: {
@@ -22,25 +22,54 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
-        });
+        // Check if it's an admin login (using id field as email)
+        const adminSnapshot = await db
+          .collection(COLLECTIONS.ADMIN)
+          .where('id', '==', credentials.email)
+          .limit(1)
+          .get();
 
-        if (!user) {
+        if (!adminSnapshot.empty) {
+          const adminDoc = adminSnapshot.docs[0];
+          const admin = adminDoc.data() as { id: string; pass: string };
+
+          const isPasswordValid = await compare(credentials.password, admin.pass);
+
+          if (!isPasswordValid) {
+            return null;
+          }
+
+          return {
+            id: adminDoc.id,
+            email: admin.id,
+            role: 'admin',
+          };
+        }
+
+        // Check regular user login
+        const usersSnapshot = await db
+          .collection(COLLECTIONS.USERS)
+          .where('email', '==', credentials.email)
+          .limit(1)
+          .get();
+
+        if (usersSnapshot.empty) {
           return null;
         }
 
-        const isPasswordValid = await compare(credentials.password, user.password);
+        const userDoc = usersSnapshot.docs[0];
+        const user = userDoc.data() as { email: string; pass: string };
+
+        const isPasswordValid = await compare(credentials.password, user.pass);
 
         if (!isPasswordValid) {
           return null;
         }
 
         return {
-          id: user.id,
+          id: userDoc.id,
           email: user.email,
-          name: user.name,
-          role: user.role,
+          role: 'user',
         };
       },
     }),
@@ -61,17 +90,12 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
     async redirect({ url, baseUrl }) {
-      // If the URL is already an absolute URL, use it
       if (url.startsWith(baseUrl)) {
         return url;
       }
-      
-      // If it's a relative URL, prepend the base URL
       if (url.startsWith('/')) {
         return `${baseUrl}${url}`;
       }
-      
-      // Default to base URL
       return baseUrl;
     },
   },

@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { db, COLLECTIONS } from "@/lib/firebase";
 
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
-    
+
     if (!session) {
       return NextResponse.json(
         { error: "Unauthorized" },
@@ -14,16 +14,24 @@ export async function GET() {
       );
     }
 
-    const printJobs = await prisma.printJob.findMany({
-      where: { userId: session.user.id },
-      orderBy: { createdAt: "desc" },
-    });
+    const queueSnapshot = await db
+      .collection(COLLECTIONS.QUEUE)
+      .where('userid', '==', session.user.id)
+      .get();
 
-    return NextResponse.json({ printJobs });
+    const queueItems = queueSnapshot.docs.map(doc => ({
+      id: doc.id,
+      userid: doc.data().userid,
+      tocken: doc.data().tocken,
+      status: doc.data().status,
+      filename: doc.data().filename,
+    }));
+
+    return NextResponse.json({ queue: queueItems });
   } catch (error) {
-    console.error("Fetch user jobs error:", error);
+    console.error("Fetch user queue error:", error);
     return NextResponse.json(
-      { error: "Failed to fetch print jobs" },
+      { error: "Failed to fetch queue items" },
       { status: 500 }
     );
   }

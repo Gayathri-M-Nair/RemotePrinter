@@ -1,39 +1,60 @@
-import { getServerSession } from "next-auth";
-import { redirect } from "next/navigation";
-import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+"use client";
 
-export default async function TokenSlipPage({ params }: { params: { id: string } }) {
-  const session = await getServerSession(authOptions);
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { db, COLLECTIONS } from "@/lib/firebase-client";
+import { getDoc, doc } from "firebase/firestore";
 
-  if (!session) {
-    redirect("/login");
+export default function TokenSlipPage({ params }: { params: { id: string } }) {
+  const router = useRouter();
+  const [queueItem, setQueueItem] = useState<any>(null);
+  const [userEmail, setUserEmail] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const queueDocRef = doc(db, COLLECTIONS.QUEUE, params.id);
+        const queueDoc = await getDoc(queueDocRef);
+
+        if (!queueDoc.exists()) {
+          router.push("/dashboard");
+          return;
+        }
+
+        const queueData = queueDoc.data();
+        setQueueItem(queueData);
+
+        // Get user email
+        const userDocRef = doc(db, COLLECTIONS.USERS, queueData.userid);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+          setUserEmail(userDoc.data().email);
+        }
+
+        setLoading(false);
+      } catch (error) {
+        console.error("Error loading token slip:", error);
+        router.push("/dashboard");
+      }
+    }
+
+    loadData();
+  }, [params.id, router]);
+
+  if (loading || !queueItem) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-xl">Loading...</div>
+      </div>
+    );
   }
-
-  const printJob = await prisma.printJob.findUnique({
-    where: { id: params.id },
-    include: {
-      user: true,
-      printer: true,
-    },
-  });
-
-  if (!printJob || printJob.userId !== session.user.id) {
-    redirect("/dashboard");
-  }
-
-  const formatDate = (date: Date) => {
-    return new Intl.DateTimeFormat("en-IN", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(date);
-  };
 
   return (
     <div className="min-h-screen bg-white">
       <div className="max-w-2xl mx-auto p-8">
         {/* Print Button */}
-        <div className="mb-6 no-print">
+        <div className="mb-6 print:hidden">
           <button
             onClick={() => window.print()}
             className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 mr-4"
@@ -58,44 +79,28 @@ export default async function TokenSlipPage({ params }: { params: { id: string }
           <div className="border-t-2 border-b-2 border-gray-800 py-6 mb-6">
             <div className="text-center">
               <p className="text-sm text-gray-600 mb-2">Token Number</p>
-              <p className="text-5xl font-bold">{printJob.tokenNumber}</p>
+              <p className="text-5xl font-bold">{queueItem.tocken}</p>
             </div>
           </div>
 
           <div className="space-y-4 mb-8">
             <div className="flex justify-between border-b pb-2">
-              <span className="font-semibold">Student Name:</span>
-              <span>{printJob.user.name}</span>
+              <span className="font-semibold">Email:</span>
+              <span>{userEmail || 'N/A'}</span>
             </div>
             <div className="flex justify-between border-b pb-2">
-              <span className="font-semibold">Student ID:</span>
-              <span>{printJob.user.studentId || "N/A"}</span>
+              <span className="font-semibold">File Name:</span>
+              <span>{queueItem.filename}</span>
             </div>
             <div className="flex justify-between border-b pb-2">
-              <span className="font-semibold">Printer Name:</span>
-              <span>{printJob.printer.name}</span>
-            </div>
-            <div className="flex justify-between border-b pb-2">
-              <span className="font-semibold">Printer Location:</span>
-              <span>{printJob.printer.location}</span>
-            </div>
-            <div className="flex justify-between border-b pb-2">
-              <span className="font-semibold">Document Sheets:</span>
-              <span>{printJob.documentSheets}</span>
-            </div>
-            <div className="flex justify-between border-b pb-2">
-              <span className="font-semibold">Total Sheets:</span>
-              <span>{printJob.totalSheets} (including token slip)</span>
-            </div>
-            <div className="flex justify-between border-b pb-2">
-              <span className="font-semibold">Date & Time:</span>
-              <span>{formatDate(printJob.createdAt)}</span>
+              <span className="font-semibold">Status:</span>
+              <span>{queueItem.status}</span>
             </div>
           </div>
 
           <div className="bg-gray-100 p-4 rounded-lg mb-6">
             <p className="text-sm text-center">
-              <strong>Queue Position:</strong> {printJob.queuePosition}
+              <strong>Current Status:</strong> {queueItem.status}
             </p>
           </div>
 
@@ -105,18 +110,6 @@ export default async function TokenSlipPage({ params }: { params: { id: string }
           </div>
         </div>
       </div>
-
-      <style jsx global>{`
-        @media print {
-          .no-print {
-            display: none;
-          }
-          body {
-            margin: 0;
-            padding: 20px;
-          }
-        }
-      `}</style>
     </div>
   );
 }

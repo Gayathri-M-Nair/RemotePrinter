@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { db, COLLECTIONS } from "@/lib/firebase";
 import Link from "next/link";
 
 export default async function TokenPage({ params }: { params: { tokenNumber: string } }) {
@@ -11,22 +11,34 @@ export default async function TokenPage({ params }: { params: { tokenNumber: str
     redirect("/login");
   }
 
-  const printJob = await prisma.printJob.findUnique({
-    where: { tokenNumber: params.tokenNumber },
-    include: {
-      user: true,
-    },
-  });
+  // Get queue item by token number
+  const queueSnapshot = await db
+    .collection(COLLECTIONS.QUEUE)
+    .where('tocken', '==', params.tokenNumber)
+    .limit(1)
+    .get();
 
-  if (!printJob || printJob.userId !== session.user.id) {
+  if (queueSnapshot.empty) {
     redirect("/dashboard");
   }
 
-  const formatDate = (date: Date) => {
+  const queueDoc = queueSnapshot.docs[0];
+  const queueItem = queueDoc.data() as { userid: string; tocken: string; status: string; filename: string };
+
+  if (queueItem.userid !== session.user.id) {
+    redirect("/dashboard");
+  }
+
+  // Get user data
+  const userDoc = await db.collection(COLLECTIONS.USERS).doc(queueItem.userid).get();
+  const user = userDoc.data();
+
+  const formatDate = (date: any) => {
+    const dateObj = date.toDate ? date.toDate() : new Date(date);
     return new Intl.DateTimeFormat("en-IN", {
       dateStyle: "medium",
       timeStyle: "short",
-    }).format(date);
+    }).format(dateObj);
   };
 
   return (
@@ -42,7 +54,7 @@ export default async function TokenPage({ params }: { params: { tokenNumber: str
           <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-6">
             <div className="flex items-center gap-3 mb-2">
               <div className="text-3xl">✓</div>
-              <h2 className="text-2xl font-bold text-green-800">Payment Successful!</h2>
+              <h2 className="text-2xl font-bold text-green-800">Print Job Submitted!</h2>
             </div>
             <p className="text-green-700">Your print job has been added to the queue.</p>
           </div>
@@ -51,52 +63,27 @@ export default async function TokenPage({ params }: { params: { tokenNumber: str
             <div className="text-center mb-8">
               <h3 className="text-gray-600 mb-2">Your Token Number</h3>
               <div className="text-5xl font-bold text-blue-600 mb-4">
-                {printJob.tokenNumber}
+                {queueItem.tocken}
               </div>
               <div className="inline-block bg-yellow-100 text-yellow-800 px-4 py-2 rounded-full font-medium">
-                Position in Queue: {printJob.queuePosition}
+                Status: {queueItem.status}
               </div>
             </div>
 
             <div className="border-t border-b py-6 mb-6 space-y-4">
               <div className="flex justify-between">
-                <span className="text-gray-600">Document Name:</span>
-                <span className="font-medium">{printJob.documentName}</span>
+                <span className="text-gray-600">File Name:</span>
+                <span className="font-medium">{queueItem.filename}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Total Pages:</span>
-                <span className="font-medium">{printJob.totalPages}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Sheets Required:</span>
-                <span className="font-medium">{printJob.sheetsRequired}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Printing Cost:</span>
-                <span className="font-medium">₹{printJob.printingCost}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Token Slip:</span>
-                <span className="font-medium">₹{printJob.tokenCharge}</span>
-              </div>
-              <div className="flex justify-between text-lg font-bold">
-                <span className="text-gray-600">Total Cost:</span>
-                <span className="text-blue-600">₹{printJob.totalAmount}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Printer Location:</span>
-                <span className="font-medium">{printJob.printerLocation}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Submitted:</span>
-                <span className="font-medium">{formatDate(printJob.createdAt)}</span>
+                <span className="text-gray-600">Email:</span>
+                <span className="font-medium">{user?.email || 'N/A'}</span>
               </div>
             </div>
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
               <p className="text-sm text-blue-800">
-                <strong>Important:</strong> Please note your token number and present it at the 
-                printer location when collecting your prints.
+                <strong>Important:</strong> Please note your token number and check queue status.
               </p>
             </div>
 

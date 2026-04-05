@@ -1,26 +1,28 @@
 import { NextResponse } from "next/server";
 import { hash } from "bcryptjs";
-import { prisma } from "@/lib/prisma";
+import { db, COLLECTIONS } from "@/lib/firebase";
 import { z } from "zod";
 
 const registerSchema = z.object({
-  name: z.string().min(1, "Name is required"),
   email: z.string().email("Invalid email"),
   password: z.string().min(6, "Password must be at least 6 characters"),
-  studentId: z.string().optional(),
-  phone: z.string().optional(),
+  name: z.string().min(1, "Name is required"),
+  phone: z.string().min(1, "Phone number is required"),
 });
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { name, email, password, studentId, phone } = registerSchema.parse(body);
+    const { email, password, name, phone } = registerSchema.parse(body);
 
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-    });
+    // Check if user already exists
+    const existingUserSnapshot = await db
+      .collection(COLLECTIONS.USERS)
+      .where('email', '==', email)
+      .limit(1)
+      .get();
 
-    if (existingUser) {
+    if (!existingUserSnapshot.empty) {
       return NextResponse.json(
         { error: "Email already exists" },
         { status: 400 }
@@ -29,18 +31,22 @@ export async function POST(req: Request) {
 
     const hashedPassword = await hash(password, 12);
 
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email,
-        password: hashedPassword,
-        studentId,
-        phone,
-      },
+    // Create new user document
+    const userRef = await db.collection(COLLECTIONS.USERS).add({
+      email,
+      name,
+      pass: hashedPassword,
+      phone,
+      userid: "", // Will be updated with document ID
+    });
+
+    // Update userid with the generated document ID
+    await userRef.update({
+      userid: userRef.id,
     });
 
     return NextResponse.json(
-      { message: "User created successfully", userId: user.id },
+      { message: "User created successfully", userId: userRef.id },
       { status: 201 }
     );
   } catch (error) {

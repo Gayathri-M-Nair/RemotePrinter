@@ -51,13 +51,13 @@ export default function PrintPreferencesPage() {
     }
 
     // Calculate pages per physical sheet based on duplex mode
-    const pagesPerPhysicalSheet = preferences.duplex === "double" 
-      ? preferences.pagesPerSheet * 2 
+    const pagesPerPhysicalSheet = preferences.duplex === "double"
+      ? preferences.pagesPerSheet * 2
       : preferences.pagesPerSheet;
 
     // Calculate sheets required
     const sheets = Math.ceil(totalPages / pagesPerPhysicalSheet) * preferences.copies;
-    
+
     // Calculate cost based on sheets
     const pricePerSheet = preferences.colorMode === "color" ? 5 : 2;
     const cost = sheets * pricePerSheet;
@@ -66,11 +66,45 @@ export default function PrintPreferencesPage() {
   };
 
   const { totalPages, sheets, cost } = calculatePrintDetails();
+  const [loading, setLoading] = useState(false);
 
-  const handleContinue = () => {
-    sessionStorage.setItem("printPreferences", JSON.stringify(preferences));
-    sessionStorage.setItem("printSummary", JSON.stringify({ totalPages, sheets, cost }));
-    router.push("/student/payment");
+  const TOKEN_CHARGE = 1; // ₹1 for token slip
+
+  const handleSubmit = async () => {
+    if (!fileInfo) return;
+
+    setLoading(true);
+
+    try {
+      // Create queue item with just filename
+      const response = await fetch("/api/print-jobs/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: fileInfo.originalName,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Clear session storage
+        sessionStorage.removeItem("uploadedFile");
+        sessionStorage.removeItem("printPreferences");
+        sessionStorage.removeItem("printSummary");
+
+        // Redirect to token page
+        router.push(`/dashboard/token/${data.queue.tocken}`);
+      } else {
+        alert(data.error || "Failed to create print job");
+        console.error("API Error:", data);
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error("Submit error:", error);
+      alert("An error occurred. Please try again.");
+      setLoading(false);
+    }
   };
 
   if (!fileInfo) return null;
@@ -160,11 +194,10 @@ export default function PrintPreferencesPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => setPreferences({ ...preferences, colorMode: "bw" })}
-                    className={`p-4 border-2 rounded-lg transition-all ${
-                      preferences.colorMode === "bw"
-                        ? "border-blue-600 bg-blue-50"
-                        : "border-gray-300 hover:border-gray-400"
-                    }`}
+                    className={`p-4 border-2 rounded-lg transition-all ${preferences.colorMode === "bw"
+                      ? "border-blue-600 bg-blue-50"
+                      : "border-gray-300 hover:border-gray-400"
+                      }`}
                   >
                     <div className="text-2xl mb-2">⚫</div>
                     <div className="font-medium">Black & White</div>
@@ -172,11 +205,10 @@ export default function PrintPreferencesPage() {
                   </button>
                   <button
                     onClick={() => setPreferences({ ...preferences, colorMode: "color" })}
-                    className={`p-4 border-2 rounded-lg transition-all ${
-                      preferences.colorMode === "color"
-                        ? "border-blue-600 bg-blue-50"
-                        : "border-gray-300 hover:border-gray-400"
-                    }`}
+                    className={`p-4 border-2 rounded-lg transition-all ${preferences.colorMode === "color"
+                      ? "border-blue-600 bg-blue-50"
+                      : "border-gray-300 hover:border-gray-400"
+                      }`}
                   >
                     <div className="text-2xl mb-2">🎨</div>
                     <div className="font-medium">Color</div>
@@ -191,22 +223,20 @@ export default function PrintPreferencesPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => setPreferences({ ...preferences, paperSize: "A4" })}
-                    className={`p-4 border-2 rounded-lg transition-all ${
-                      preferences.paperSize === "A4"
-                        ? "border-blue-600 bg-blue-50"
-                        : "border-gray-300 hover:border-gray-400"
-                    }`}
+                    className={`p-4 border-2 rounded-lg transition-all ${preferences.paperSize === "A4"
+                      ? "border-blue-600 bg-blue-50"
+                      : "border-gray-300 hover:border-gray-400"
+                      }`}
                   >
                     <div className="font-medium">A4</div>
                     <div className="text-sm text-gray-600">210 × 297 mm</div>
                   </button>
                   <button
                     onClick={() => setPreferences({ ...preferences, paperSize: "A3" })}
-                    className={`p-4 border-2 rounded-lg transition-all ${
-                      preferences.paperSize === "A3"
-                        ? "border-blue-600 bg-blue-50"
-                        : "border-gray-300 hover:border-gray-400"
-                    }`}
+                    className={`p-4 border-2 rounded-lg transition-all ${preferences.paperSize === "A3"
+                      ? "border-blue-600 bg-blue-50"
+                      : "border-gray-300 hover:border-gray-400"
+                      }`}
                   >
                     <div className="font-medium">A3</div>
                     <div className="text-sm text-gray-600">297 × 420 mm</div>
@@ -222,11 +252,10 @@ export default function PrintPreferencesPage() {
                     <button
                       key={num}
                       onClick={() => setPreferences({ ...preferences, pagesPerSheet: num })}
-                      className={`p-3 border-2 rounded-lg font-medium transition-all ${
-                        preferences.pagesPerSheet === num
-                          ? "border-blue-600 bg-blue-50"
-                          : "border-gray-300 hover:border-gray-400"
-                      }`}
+                      className={`p-3 border-2 rounded-lg font-medium transition-all ${preferences.pagesPerSheet === num
+                        ? "border-blue-600 bg-blue-50"
+                        : "border-gray-300 hover:border-gray-400"
+                        }`}
                     >
                       {num}
                     </button>
@@ -240,22 +269,20 @@ export default function PrintPreferencesPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => setPreferences({ ...preferences, orientation: "portrait" })}
-                    className={`p-4 border-2 rounded-lg transition-all ${
-                      preferences.orientation === "portrait"
-                        ? "border-blue-600 bg-blue-50"
-                        : "border-gray-300 hover:border-gray-400"
-                    }`}
+                    className={`p-4 border-2 rounded-lg transition-all ${preferences.orientation === "portrait"
+                      ? "border-blue-600 bg-blue-50"
+                      : "border-gray-300 hover:border-gray-400"
+                      }`}
                   >
                     <div className="text-2xl mb-2">📄</div>
                     <div className="font-medium">Portrait</div>
                   </button>
                   <button
                     onClick={() => setPreferences({ ...preferences, orientation: "landscape" })}
-                    className={`p-4 border-2 rounded-lg transition-all ${
-                      preferences.orientation === "landscape"
-                        ? "border-blue-600 bg-blue-50"
-                        : "border-gray-300 hover:border-gray-400"
-                    }`}
+                    className={`p-4 border-2 rounded-lg transition-all ${preferences.orientation === "landscape"
+                      ? "border-blue-600 bg-blue-50"
+                      : "border-gray-300 hover:border-gray-400"
+                      }`}
                   >
                     <div className="text-2xl mb-2">📃</div>
                     <div className="font-medium">Landscape</div>
@@ -269,21 +296,19 @@ export default function PrintPreferencesPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => setPreferences({ ...preferences, duplex: "single" })}
-                    className={`p-4 border-2 rounded-lg transition-all ${
-                      preferences.duplex === "single"
-                        ? "border-blue-600 bg-blue-50"
-                        : "border-gray-300 hover:border-gray-400"
-                    }`}
+                    className={`p-4 border-2 rounded-lg transition-all ${preferences.duplex === "single"
+                      ? "border-blue-600 bg-blue-50"
+                      : "border-gray-300 hover:border-gray-400"
+                      }`}
                   >
                     <div className="font-medium">Single Sided</div>
                   </button>
                   <button
                     onClick={() => setPreferences({ ...preferences, duplex: "double" })}
-                    className={`p-4 border-2 rounded-lg transition-all ${
-                      preferences.duplex === "double"
-                        ? "border-blue-600 bg-blue-50"
-                        : "border-gray-300 hover:border-gray-400"
-                    }`}
+                    className={`p-4 border-2 rounded-lg transition-all ${preferences.duplex === "double"
+                      ? "border-blue-600 bg-blue-50"
+                      : "border-gray-300 hover:border-gray-400"
+                      }`}
                   >
                     <div className="font-medium">Double Sided</div>
                   </button>
@@ -296,7 +321,7 @@ export default function PrintPreferencesPage() {
               <div className="sticky top-4">
                 <div className="bg-white rounded-lg shadow-md p-6">
                   <h3 className="font-semibold text-lg mb-4">Print Summary</h3>
-                  
+
                   <div className="space-y-3 mb-6">
                     <div className="flex justify-between py-2 border-b">
                       <span className="text-gray-600">Total Pages</span>
@@ -316,9 +341,17 @@ export default function PrintPreferencesPage() {
                       <span className="text-gray-600">Sheets Required</span>
                       <span className="font-semibold">{sheets}</span>
                     </div>
-                    <div className="flex justify-between py-3">
-                      <span className="text-gray-600 font-medium">Estimated Cost</span>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Estimated Cost</span>
                       <span className="font-bold text-2xl text-blue-600">₹{cost}</span>
+                    </div>
+                    <div className="flex justify-between py-2 border-t">
+                      <span className="text-gray-600">Token Slip Charge</span>
+                      <span className="font-semibold">₹{TOKEN_CHARGE}</span>
+                    </div>
+                    <div className="flex justify-between py-3 border-t">
+                      <span className="text-gray-600 font-medium">Total Amount</span>
+                      <span className="font-bold text-2xl text-green-600">₹{cost + TOKEN_CHARGE}</span>
                     </div>
                   </div>
 
@@ -345,8 +378,13 @@ export default function PrintPreferencesPage() {
                     </div>
                   </div>
 
-                  <Button onClick={handleContinue} className="w-full" size="lg">
-                    Continue to Payment →
+                  <Button
+                    onClick={handleSubmit}
+                    className="w-full"
+                    size="lg"
+                    disabled={loading}
+                  >
+                    {loading ? "Creating Print Job..." : "Submit Print Job"}
                   </Button>
                 </div>
               </div>
